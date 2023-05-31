@@ -1,0 +1,16 @@
+lodi a 5
+call factorial:
+halt
+
+factorial:
+push a
+addi a -1
+jzer a .base:
+call factorial:
+pop b
+mulr a b
+retn
+ 
+.base:
+pop a
+retn

@@ -23,16 +23,30 @@ class VM:
             "d": 0,
             "insp": 1,
         }
+        self.labels = {}
         self.steps = 0
         self.step_limit = step_limit
         self.error = None
         self.complete = False
 
     def run(self):
+        self.resolve_labels()
+
         while not self.complete and self.error is None:
             self.step()
         #if self.error is not None:
             #print(self.error)
+        
+    def resolve_labels(self):
+        line_no = 0
+        for line in self.code:
+            line_no += 1
+            splt = line.split()
+            if len(splt) == 1 and line.split()[0].endswith(":"):
+                if self.labels.__contains__(splt[0]):
+                    self.error = "Duplicate label `%s`" % splt[0]
+                    return
+                self.labels[splt[0]] = line_no
     
     def step(self):
         if self.complete or self.error:
@@ -51,7 +65,7 @@ class VM:
     
     def exec_line(self, line):
         tokens = line.split()
-        if tokens == [] or tokens[0][0] == '#':
+        if tokens == [] or tokens[0][0] == '#' or (len(tokens) == 1 and tokens[0].endswith(":")):
             self.registers["insp"] += 1
             return
         elif tokens[0] == "lodi":
@@ -87,14 +101,14 @@ class VM:
     
     def call(self, tokens):
         if len(tokens) != 2:
-            self.error = "Invalid # of arugments, try `call [line_no]`"
+            self.error = "Invalid # of arugments, try `call [label]`"
             return
         try:
             old_sp = self.registers["insp"]
-            self.registers["insp"] = int(tokens[1])
+            self.registers["insp"] = self.labels[tokens[1]]
             self.stack.append(old_sp)
         except:
-            self.error = "Attempted to call to unrecognized location `%s`" % tokens[1]
+            self.error = "Attempted to call to unrecognized label `%s`" % tokens[1]
     
     def retn(self, tokens):
         if len(tokens) != 1:
@@ -108,12 +122,12 @@ class VM:
 
     def jump(self, tokens):
         if len(tokens) != 2:
-            self.error = "Invalid number of arguments, try `jump [register]`"
+            self.error = "Invalid number of arguments, try `jump [label]`"
             return
         try:
-            self.registers["insp"] = int(tokens[1])
+            self.registers["insp"] = self.labels[tokens[1]]
         except:
-            self.error = "Attempted to jump to unrecognized location `%s`" % tokens[1]
+            self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
     
     def jzer(self, tokens):
         if len(tokens) != 3:
@@ -121,7 +135,7 @@ class VM:
             return
         try:
             if self.registers[tokens[1]] == 0:
-                self.registers["insp"] = int(tokens[2])
+                self.registers["insp"] = self.labels[tokens[2]]
             else:
                 self.registers["insp"] += 1
         except:
