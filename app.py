@@ -1,18 +1,10 @@
 from urllib.parse import parse_qs
+from pathlib import Path
 
-def build_text_area(contents):
-    return """
-<body>
-    <form action="/submit" method="post">
-        <textarea name="message" rows="8" cols="50">%s</textarea>
-        <br>
-        <input type="submit" value="Submit">
-    </form>
-</body>
-</html>
-""" % contents
+CSSPATH = "./style.css"
 
-class VM:
+
+class Interpreter:
     def __init__(self, code, step_limit=100000):
         self.code = code
         self.stack = []
@@ -34,9 +26,15 @@ class VM:
 
         while not self.complete and self.error is None:
             self.step()
-        #if self.error is not None:
-            #print(self.error)
-        
+
+    # Labels are any single token line that ends with a `:`
+    #   - `label:` is a valid label
+    #   - `:` itself is a valid labelk
+    #   - `halt:` (or any other single instruction followed by a colon) is valid, but also confusing
+    #   - `:J:SJ@%#^&*(!)*(i9032'/m..//:` is a valid label
+    #   - `bad example:` is NOT valid, as this line is made up of two tokens
+    #   - `label` is not a valid label, as it is missing a trailing colon.
+    #   -  duplicate labels will result in an error before any code is run
     def resolve_labels(self):
         line_no = 0
         for line in self.code:
@@ -47,7 +45,7 @@ class VM:
                     self.error = "Duplicate label `%s`" % splt[0]
                     return
                 self.labels[splt[0]] = line_no
-    
+
     def step(self):
         if self.complete or self.error:
             return
@@ -55,6 +53,7 @@ class VM:
             self.error = "Program reached step limit"
             return
         insp = self.registers["insp"]
+        # instruction pointer is not write protected, who knows what value it could have
         if insp > len(self.code):
             self.complete = True
             return
@@ -62,7 +61,7 @@ class VM:
             self.error = "Invalid instruction pointer value!"
         self.steps += 1
         self.exec_line(self.code[insp - 1])
-    
+
     def exec_line(self, line):
         tokens = line.split()
         if tokens == [] or tokens[0][0] == '#' or (len(tokens) == 1 and tokens[0].endswith(":")):
@@ -98,7 +97,7 @@ class VM:
             self.retn(tokens)
         else:
             self.error = "Unrecognized command %s" % tokens[0]
-    
+
     def call(self, tokens):
         if len(tokens) != 2:
             self.error = "Invalid # of arugments, try `call [label]`"
@@ -109,7 +108,7 @@ class VM:
             self.stack.append(old_sp)
         except:
             self.error = "Attempted to call to unrecognized label `%s`" % tokens[1]
-    
+
     def retn(self, tokens):
         if len(tokens) != 1:
             self.error = "Invalid # of arguments, try `retn`"
@@ -118,7 +117,6 @@ class VM:
             self.error = "Attempted to return with empty stack"
             return
         self.registers["insp"] = self.stack.pop() + 1
-        
 
     def jump(self, tokens):
         if len(tokens) != 2:
@@ -128,7 +126,7 @@ class VM:
             self.registers["insp"] = self.labels[tokens[1]]
         except:
             self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
-    
+
     def jzer(self, tokens):
         if len(tokens) != 3:
             self.error = "Invalid number of arguments, try `jzer [register] [line]`"
@@ -140,8 +138,7 @@ class VM:
                 self.registers["insp"] += 1
         except:
             self.error = "Could not jump to location %s based off of register %s" % tokens[2], tokens[1]
-            
-    
+
     def push(self, tokens):
         if len(tokens) != 2:
             self.error = "Invalid number of arguments, try `push [register]"
@@ -150,7 +147,7 @@ class VM:
             self.stack.append(self.registers[tokens[1]])
             self.registers["insp"] += 1
         except:
-            self.error = "Attempted to push from unrecognized register '%s'" % tokens[1]            
+            self.error = "Attempted to push from unrecognized register '%s'" % tokens[1]
 
     def pop(self, tokens):
         if len(tokens) != 2:
@@ -185,7 +182,7 @@ class VM:
                 self.registers["insp"] += 1
             except:
                 self.error = "Could not load value `%s` into register `%s`" % (tokens[2], tokens[1])
-    
+
     def lodr(self, tokens):
         if len(tokens) != 3:
             self.error = "Invalid number of arguments in lodr: try `lodr [register] [register]`"
@@ -235,31 +232,34 @@ class VM:
                 self.registers["insp"] += 1
             except:
                 self.error = "Could not multiply register " + tokens[2] + " by register " + tokens[1]
-    
+
     def halt(self, tokens):
         self.complete = True
 
     def get_registers(self):
         return (self.registers["a"], self.registers["b"], self.registers["c"], self.registers["d"], self.registers["insp"])
+
     def get_stack(self):
         return self.stack
-    def get_err_string(self):
+
+    def get_error_string(self):
         if self.error is None:
             return ""
         return self.error
 
-def build_stack(cpu):
+# Build a list representation of a cpu's stack. Zero indexed where
+# the top of the stack is index 0.
+def build_stack_list(cpu):
     stck = cpu.get_stack()
     stck.reverse()
-    print(stck)
-    html = '<ol start="0">\n'
+    html = '<h5>Stack:</h5>'
+    html += '<ol start="0">\n'
     for item in stck:
-        print(item)
         html += '<li>%s</li>\n' % item
     html += '</ol>'
     return html
 
-def build_table(cpu):
+def build_register_table(cpu):
     return """
 <table>
     <tr>
@@ -286,27 +286,55 @@ def build_table(cpu):
         <td>instruction pointer</th>
         <td>%d</th>
     </tr>
-</table>
-""" % cpu.get_registers()
+</table>""" % cpu.get_registers()
+
+# https://stackoverflow.com/a/49564464
+def load_file_to_str(path):
+    return Path(path).read_text()
+
+def build_head():
+    return """
+<head>
+    <style>
+    %s
+    </style>
+</head>
+""" % load_file_to_str(CSSPATH)
+
+def build_text_area(contents):
+    return """
+<body>
+    <form action="/submit" method="post">
+        <textarea name="message" rows="20" cols="50">%s</textarea>
+        <br>
+        <input type="submit" value="run">
+    </form>
+</body>
+</html>
+""" % contents
 
 def run_program(text):
     program = text.splitlines()
-    cpu = VM(program)
+    cpu = Interpreter(program)
     cpu.run()
-    return cpu.get_err_string() + "<br>" + build_table(cpu) + "<br>" + build_stack(cpu)
+    return cpu.get_error_string() + "<br>" + build_register_table(cpu) + "<br>" + build_stack_list(cpu)
 
-def handle_submit(env, start_response, page):
+def handle_submit(env, page):
     body_len = int(env.get("CONTENT_LENGTH", 0))
     body = env["wsgi.input"].read(body_len).decode("UTF-8")
     msg = parse_qs(body).get('message')[0]
-    page = build_text_area(msg)
+    page += build_text_area(msg)
     page += run_program(msg)
     return page
 
 def application(env, start_response):
-    page = build_text_area("#insert your code here!")
+    page = '<html>'
+    page += build_head()
 
     if env["REQUEST_METHOD"] == "POST" and env["PATH_INFO"] == '/submit':
-        page = handle_submit(env, start_response, page)
+        page += handle_submit(env, page)
+    else:
+        page += build_text_area("#insert your code here!")
+    page += '</html>'
     start_response('200 OK', [('Content-Type','text/html')])
     return bytes(page, "UTF-8")
