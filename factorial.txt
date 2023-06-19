@@ -5,7 +5,8 @@ halt
 factorial:
 push a
 addi a -1
-jzer a .base:
+cmpi a 0
+jmeq .base:
 call factorial:
 pop b
 mulr a b

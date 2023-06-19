@@ -15,6 +15,11 @@ class Interpreter:
             "d": 0,
             "insp": 1,
         }
+        self.flags = {
+            "eq": 0,
+            "lt": 0,
+            "gt": 0,
+        }
         self.labels = {}
         self.steps = 0
         self.step_limit = step_limit
@@ -87,8 +92,16 @@ class Interpreter:
             self.peek(tokens)
         elif tokens[0] == "jump":
             self.jump(tokens)
-        elif tokens[0] == "jzer":
-            self.jzer(tokens)
+        elif tokens[0] == "jmeq":
+            self.jmeq(tokens)
+        elif tokens[0] == "jmlt":
+            self.jmlt(tokens)
+        elif tokens[0] == "jmgt":
+            self.jmgt(tokens)
+        elif tokens[0] == "cmpr":
+            self.cmpr(tokens)
+        elif tokens[0] == "cmpi":
+            self.cmpi(tokens)
         elif tokens[0] == "halt":
             self.halt(tokens)
         elif tokens[0] == "call":
@@ -127,17 +140,70 @@ class Interpreter:
         except:
             self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
 
-    def jzer(self, tokens):
-        if len(tokens) != 3:
-            self.error = "Invalid number of arguments, try `jzer [register] [line]`"
+    def jmeq(self, tokens):
+        if len(tokens) != 2:
+            self.error = "Invalid # of arguments, try `jmeq [label]`"
             return
         try:
-            if self.registers[tokens[1]] == 0:
-                self.registers["insp"] = self.labels[tokens[2]]
+            if self.flags["eq"]:
+                self.registers["insp"] = self.labels[tokens[1]]
             else:
                 self.registers["insp"] += 1
         except:
-            self.error = "Could not jump to location %s based off of register %s" % tokens[2], tokens[1]
+            self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
+
+    def jmlt(self, tokens):
+        if len(tokens) != 2:
+            self.error = "Invalid # of arguments, try `jmlt [label]`"
+            return
+        try:
+            if self.flags["lt"]:
+                self.registers["insp"] = self.labels[tokens[1]]
+            else:
+                self.registers["insp"] += 1
+        except:
+            self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
+
+    def jmgt(self, tokens):
+        if len(tokens) != 2:
+            self.error = "Invalid # of arguments, try `jmgt [label]`"
+            return
+        try:
+            if self.flags["gt"]:
+                self.registers["insp"] = self.labels[tokens[1]]
+            else:
+                self.registers["insp"] += 1
+        except:
+            self.error = "Attempted to jump to unrecognized label `%s`" % tokens[1]
+
+    def cmpr(self, tokens):
+        if len(tokens) != 3:
+            self.error = "Invalid # of arguments, try `cmpr [register] [register]`"
+            return
+        try:
+            left = self.registers[tokens[1]]
+            right = self.registers[tokens[2]]
+            self.flags["lt"] = left < right
+            self.flags["gt"] = left > right
+            self.flags["eq"] = left == right
+            self.registers["insp"] += 1
+        except:
+            self.error = "Could not compare register %s to register %s" % (tokens[1], tokens[2])
+
+    def cmpi(self, tokens):
+        if len(tokens) != 3:
+            self.error = "Invalid # of arguments, try `cmpi [register] [immediate]`"
+            return
+        try:
+            left = self.registers[tokens[1]]
+            right = int(tokens[2])
+            self.flags["lt"] = left < right
+            self.flags["gt"] = left > right
+            self.flags["eq"] = left == right
+            self.registers["insp"] += 1
+        except:
+            self.error = "Could not compare register %s to immediate %s" % (tokens[1], tokens[2])
+
 
     def push(self, tokens):
         if len(tokens) != 2:
